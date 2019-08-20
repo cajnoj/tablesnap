@@ -19,6 +19,8 @@
 
 import argparse
 import boto
+import boto3
+
 from dateutil import parser
 import grp
 import json
@@ -362,7 +364,7 @@ def main():
         help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
     ap.add_argument('--aws-region',
         default='us-east-1',
-        choices=[region.name for region in boto.s3.regions()],
+        choices=[r['RegionName'] for r in boto3.client('ec2').describe_regions()['Regions']],
         help='AWS region to connect to.')
     ap.add_argument('-p', '--preserve', default=False, action='store_true',
         help='Preserve the permissions (if they exist) from the source. '

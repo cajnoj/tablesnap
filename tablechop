@@ -6,6 +6,8 @@ eventlet.monkey_patch()
 
 import argparse
 import boto
+import boto3
+
 import json
 import logging
 import os
@@ -169,7 +171,7 @@ def main(log):
         help='Amazon S3 Token (default from AWS_SECURITY_TOKEN in environment)')
     parser.add_argument('--aws-region',
         default='us-east-1',
-        choices=[region.name for region in boto.s3.regions()],
+        choices=[r['RegionName'] for r in boto3.client('ec2').describe_regions()['Regions']],
         help='AWS region to connect to.')
     parser.add_argument(
         '-n',
