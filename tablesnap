@@ -18,6 +18,7 @@ import grp
 import re
 import signal
 import StringIO
+import hashlib
 
 default_log = logging.getLogger('tablesnap')
 if os.environ.get('TABLESNAP_SYSLOG', False):
@@ -208,7 +209,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                                  (filename, strerror, format_exc(),))
                     raise
 
-                md5 = key.compute_md5(fp)
+                md5 = compute_md5(fp)
                 fp.close()
                 self.log.debug('Computed md5: %s' % (md5,))
 
@@ -216,17 +217,17 @@ class UploadHandler(pyinotify.ProcessEvent):
 
                 if meta:
                     self.log.debug('MD5 metadata comparison: %s == %s? : %s' %
-                                  (md5[0], meta, (md5[0] == meta)))
-                    result = (md5[0] == meta)
+                                  (md5, meta, (md5 == meta)))
+                    result = (md5 == meta)
                 else:
                     self.log.debug('ETag comparison: %s == %s? : %s' %
-                                  (md5[0], key.etag.strip('"'),
-                                  (md5[0] == key.etag.strip('"'))))
-                    result = (md5[0] == key.etag.strip('"'))
+                                  (md5, key.etag.strip('"'),
+                                  (md5 == key.etag.strip('"'))))
+                    result = (md5 == key.etag.strip('"'))
                     if result:
                         self.log.debug('Setting missing md5sum metadata for %s' %
                                       (keyname,))
-                        key.set_metadata('md5sum', md5[0])
+                        key.set_metadata('md5sum', md5)
 
                 if result:
                     self.log.info("Keyname %s already exists, skipping upload"
@@ -299,7 +300,7 @@ class UploadHandler(pyinotify.ProcessEvent):
             except IOError:
                 # File removed?
                 return
-            md5 = boto.utils.compute_md5(fp)
+            md5 = compute_md5(fp)
             self.log.debug('Computed md5sum before upload is: %s' % (md5,))
             fp.close()
 
@@ -367,7 +368,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                                      (filename))
                         mp = bucket.initiate_multipart_upload(keyname,
                             reduced_redundancy=self.reduced_redundancy,
-                            metadata={'stat': meta, 'md5sum': md5[0]},
+                            metadata={'stat': meta, 'md5sum': md5},
                             encrypt_key=self.with_sse)
                         part = 1
                         chunk = None
@@ -396,7 +397,7 @@ class UploadHandler(pyinotify.ProcessEvent):
                         self.log.debug('Performing monolithic upload')
                         key = bucket.new_key(keyname)
                         key.set_metadata('stat', meta)
-                        key.set_metadata('md5sum', md5[0])
+                        key.set_metadata('md5sum', md5)
                         key.set_contents_from_filename(filename, replace=True,
                                                        cb=progress, num_cb=1,
                                                        md5=md5,
@@ -417,6 +418,15 @@ class UploadHandler(pyinotify.ProcessEvent):
         except:
             self.log.error('Error uploading %s\n%s' % (keyname, format_exc()))
             raise
+
+def compute_md5(fp):
+    hasher = hashlib.md5()
+    BUF_SIZE = 8192
+    buf = fp.read(BUF_SIZE)
+    while buf:
+        hasher.update(buf)
+        buf = fp.read(BUF_SIZE)
+    return hasher.hexdigest()
 
 def get_mask(listen_events):
     if not listen_events:
